@@ -12,10 +12,12 @@ def load_csv(csv_path):
     for _, row in df.iterrows():
         question = str(row['question']).strip()
         answer = str(row['answer']).strip()
+        category = str(row.get('category', 'General')).strip()
         if question and answer:
             doc = Document(
                 page_content=answer,
-                metadata={"question": question}
+                metadata={"question": question,
+                          "category": category}
             )
             documents.append(doc)
 

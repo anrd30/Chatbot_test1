@@ -6,25 +6,60 @@
 /mess.pdf
 /mess.txt
 /iitrpr_qa - Sheet1.csv
-# Python
+# --- Python ---
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+*.egg
+.env
+.venv/
 venv/
+.envrc
+*.log
+
+# --- Virtual environment folders ---
 env/
+ENV/
+.venv/
 
-# Generated DB
-chromadb/
+# --- Jupyter Notebooks ---
+.ipynb_checkpoints/
 
-# Generated text files
+# --- CSV & Local Data Files (don’t push dataset) ---
+*.csv
+*.pdf
 *.txt
+chromadb/
+chromaDb/
+chromaDb_csv/
 
-# React frontend
+# --- Node / React ---
 frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.js
+frontend/package-lock.json
+frontend/yarn.lock
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# --- Build output ---
 frontend/build/
+frontend/dist/
+frontend/.next/
+frontend/out/
+
+# --- Logs ---
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
-# IDEs
-.vscode/
+# --- OS generated files ---
+.DS_Store
+Thumbs.db
