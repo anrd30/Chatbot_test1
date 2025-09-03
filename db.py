@@ -1,10 +1,11 @@
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.vectorstores import Chroma
-from langchain_core.documents import Document
-
 import os
 
-def build_or_load_db(documents, persist_dir="chromaDb"):
+def build_or_load_db(documents, persist_dir="chromaDb_csv"):
+    """
+    Build a new Chroma vector DB from documents or load existing one.
+    """
     embedding_model = OllamaEmbeddings(model="nomic-embed-text")
     
     if not os.path.exists(persist_dir) or not os.listdir(persist_dir):
