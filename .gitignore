@@ -36,6 +36,9 @@ chromadb/
 chromaDb/
 chromaDb_csv/
 
+# Track active Chroma DB used by backend (persist dir)
+!chromaDb_csv1/**
+
 # --- Node / React ---
 frontend/node_modules/
 frontend/.pnp
@@ -52,6 +55,12 @@ frontend/build/
 frontend/dist/
 frontend/.next/
 frontend/out/
+
+# --- Vite/React (frontend_new) ---
+frontend_new/node_modules/
+frontend_new/dist/
+frontend_new/.vite/
+frontend_new/.DS_Store
 
 # --- Logs ---
 *.log
