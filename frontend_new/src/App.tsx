@@ -11,6 +11,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [chatId, setChatId] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const controllerRef = useRef<AbortController | null>(null);
+  const timersRef = useRef<number[]>([]);
 
   // Initialize chatId on first load
   useEffect(() => {
@@ -36,6 +38,39 @@ export default function App() {
     setIsLoading(true);
 
     try {
+      // Cleanup any previous timers/controllers
+      if (controllerRef.current) {
+        controllerRef.current.abort();
+      }
+      timersRef.current.forEach((id) => clearTimeout(id));
+      timersRef.current = [];
+
+      const controller = new AbortController();
+      controllerRef.current = controller;
+
+      // Staged timeouts: 20s, 40s, 60s (abort)
+      const t1 = window.setTimeout(() => {
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: 'Time 1: still working…', timestamp: new Date() },
+        ]);
+      }, 20_000);
+      const t2 = window.setTimeout(() => {
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: 'Time 2: almost there…', timestamp: new Date() },
+        ]);
+      }, 40_000);
+      const t3 = window.setTimeout(() => {
+        controller.abort();
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: 'Time 3: request timed out after 60s. Please try again or refine your question.', timestamp: new Date() },
+        ]);
+        setIsLoading(false);
+      }, 60_000);
+      timersRef.current.push(t1, t2, t3);
+
       // Use Vite dev proxy to avoid CORS in development
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -43,6 +78,7 @@ export default function App() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ message }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -57,17 +93,22 @@ export default function App() {
         timestamp: new Date(),
       };
 
-      setMessages([...updatedMessages, assistantMessage]);
-    } catch (error) {
+      // Clear staged timers on success
+      timersRef.current.forEach((id) => clearTimeout(id));
+      timersRef.current = [];
+
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error: any) {
       console.error('Error sending message:', error);
-
-      const errorMessage: Message = {
-        role: 'assistant',
-        content: 'Sorry, there was an error processing your request. Please try again.',
-        timestamp: new Date(),
-      };
-
-      setMessages([...updatedMessages, errorMessage]);
+      // If aborted by our timeout, we already appended a timeout message in t3
+      if (error?.name !== 'AbortError') {
+        const errorMessage: Message = {
+          role: 'assistant',
+          content: 'Sorry, there was an error processing your request. Please try again.',
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -76,6 +117,13 @@ export default function App() {
   const handleNewChat = () => {
     setChatId(`chat-${Date.now()}`);
     setMessages([]);
+    // Cleanup timers and any pending request
+    if (controllerRef.current) {
+      controllerRef.current.abort();
+      controllerRef.current = null;
+    }
+    timersRef.current.forEach((id) => clearTimeout(id));
+    timersRef.current = [];
   };
 
   return (

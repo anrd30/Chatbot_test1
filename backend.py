@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS, cross_origin
-from processing import load_csv, split_documents
+from processing1 import load_csv, split_documents
 from db import build_or_load_db
 from llm import answer_question
 import os
@@ -9,7 +9,9 @@ import traceback
 app = Flask(__name__)
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+        "origins": ["http://localhost:5173", "http://127.0.0.1:5173",
+                    "http://localhost:5174", "http://127.0.0.1:5174"
+        ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
     }
