@@ -8,10 +8,13 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 def load_csv(csv_path: str):
     print(f"[DEBUG] Loading CSV from: {csv_path}")
     df = pd.read_csv(csv_path)
+    # Normalize headers to lowercase to tolerate 'Category, Question, Answer'
+    df.columns = [str(c).strip().lower() for c in df.columns]
+    print(f"[DEBUG] Detected columns: {list(df.columns)}")
 
     documents = []
     for i, row in df.iterrows():
-        # Assume columns: Category, Question, Answer
+        # Expect lowercase: category, question, answer (after normalization above)
         question = str(row.get("question", "")).strip()
         answer = str(row.get("answer", "")).strip()
         category = str(row.get("category", "General")).strip()

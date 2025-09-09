@@ -18,7 +18,7 @@ CORS(app, resources={
 })
 
 # --- Load CSV and build vector DB once on startup ---
-CSV_PATH = r"DATA_05_09_2025 - Sheet1.csv"
+CSV_PATH = r"C:\Users\Dell\Chatbot_test2\DATA_05_09_2025 - Sheet1.csv"
 PERSIST_DIR = "chromaDb_csv1"
 
 if not os.path.exists(PERSIST_DIR):

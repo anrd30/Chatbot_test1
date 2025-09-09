@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Box, CssBaseline, Container } from '@mui/material';
+import { Box, CssBaseline, Container, Stack, Button } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import { theme } from './theme';
 import { ChatInterface } from './components/ChatInterface';
 import { Header } from './components/Header';
+import Testing from './components/Testing';
 import { Message } from './services/api';
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const timersRef = useRef<number[]>([]);
+  const [view, setView] = useState<'chat' | 'testing'>('chat');
 
   // Initialize chatId on first load
   useEffect(() => {
@@ -141,12 +143,21 @@ export default function App() {
             px: { xs: 1, sm: 2 },
           }}
         >
-          <ChatInterface
-            messages={messages}
-            onSendMessage={handleSendMessage}
-            isLoading={isLoading}
-            messagesEndRef={messagesEndRef}
-          />
+          <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+            <Button variant={view === 'chat' ? 'contained' : 'outlined'} onClick={() => setView('chat')}>Chat</Button>
+            <Button variant={view === 'testing' ? 'contained' : 'outlined'} onClick={() => setView('testing')}>Testing</Button>
+          </Stack>
+
+          {view === 'chat' ? (
+            <ChatInterface
+              messages={messages}
+              onSendMessage={handleSendMessage}
+              isLoading={isLoading}
+              messagesEndRef={messagesEndRef}
+            />
+          ) : (
+            <Testing />
+          )}
         </Container>
       </Box>
     </ThemeProvider>

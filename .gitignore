@@ -29,7 +29,6 @@ ENV/
 .ipynb_checkpoints/
 
 # --- CSV & Local Data Files (don’t push dataset) ---
-*.csv
 *.pdf
 *.txt
 chromadb/

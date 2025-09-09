@@ -29,6 +29,129 @@ prompt_template = ChatPromptTemplate.from_template(template)
 # Using llama3 for better understanding and response generation
 llm = OllamaLLM(model="phi:latest", temperature=0.1, max_tokens=2000)
 
+def qoqa_rewrite(query: str, n: int = 3) -> dict:
+    """QOQA-style query optimization: produce one canonical rewrite and n alignment-oriented queries.
+    Returns {"canonical": str, "queries": [str,...]} with robust fallbacks.
+    """
+    rewriter = OllamaLLM(model="phi:latest", temperature=0.0, max_tokens=400)
+    base = query.strip()
+    canonical, queries = None, []
+
+    def _attempt_once() -> dict | None:
+        prompt = (
+            
+    "You are a query optimizer for IIT Ropar’s knowledge base.\n"
+    "Your task: rewrite the user’s question into a canonical form and "
+    "produce multiple search-friendly variants.\n\n"
+    "Return ONLY a JSON object of the form:\n"
+    "{"
+    "  \"canonical\": string,"  
+    "  \"queries\": [string, string, string]"
+    "}\n\n"
+    "Rules:\n"
+    "- canonical: 2 concise rewrites that makes the user’s intent explicit "
+    "using terms found in IIT Ropar FAQs, official departments, roles, or facilities.\n"
+    "- queries: exactly {n} distinct rewrites optimized for retrieval. Use synonyms, abbreviations, and role/department name variants. "
+    "Examples: HoD ↔ Head of Department, CSE ↔ Computer Science, Mess ↔ Hostel Mess, Sports Complex ↔ Gym.\n"
+    "- Each query must stay under 16 words.\n"
+    "- Do not generate answers, explanations, or filler text.\n"
+    "- If user question is ambiguous, generate variants that cover multiple likely intents.\n\n"
+    f"User question: {base}\n"
+)
+
+        
+        raw_local = rewriter.invoke(prompt)
+        try:
+            data = json.loads(raw_local)
+            if not isinstance(data, dict):
+                return None
+            can = data.get("canonical")
+            qs = data.get("queries")
+            if not isinstance(can, str) or not isinstance(qs, list) or len(qs) < 1:
+                return None
+            # Clean and enforce distinctness
+            can = re.sub(r"\s+", " ", can).strip()
+            out_qs, seenq = [], set()
+            for q in qs:
+                if isinstance(q, str):
+                    s = re.sub(r"\s+", " ", q).strip()
+                    if s and s.lower() not in seenq:
+                        seenq.add(s.lower())
+                        out_qs.append(s)
+            if len(out_qs) == 0:
+                return None
+            # Truncate or pad to exactly n entries
+            out_qs = out_qs[:n]
+            return {"canonical": can or base, "queries": out_qs}
+        except Exception:
+            return None
+
+    def _name_tokens(text: str) -> list[str]:
+        toks = re.findall(r"[A-Za-z][A-Za-z\.]+", text)
+        # keep capitalized tokens or those >= 4 chars that look like names
+        out = []
+        for t in toks:
+            if t.lower() in {"what","does","prof","prof.","dr","dr.","teach","teaches","course","courses","subject","subjects","at","iit","ropar","iitrpr"}:
+                continue
+            if (t[0].isupper() and len(t) >= 3) or len(t) >= 5:
+                out.append(t.strip('.'))
+        return out[:3]
+
+    def _valid_query(q: str, names: list[str]) -> bool:
+        words = q.strip().split()
+        if len(words) < 4 or len(words) > 18:
+            return False
+        # must include at least one name/entity token from the question if present
+        if names and not any(n.lower() in q.lower() for n in names):
+            return False
+        # must include an intent verb
+        intent = ["teach","teaches","teaching","courses","subjects","interests","research"]
+        if not any(iv in q.lower() for iv in intent):
+            return False
+        return True
+
+    names = _name_tokens(base)
+
+    # Try up to 2 deterministic attempts
+    for _ in range(2):
+        res = _attempt_once()
+        if res:
+            canonical, queries = res["canonical"], res["queries"]
+            # validate queries
+            queries = [q for q in queries if _valid_query(q, names)]
+            break
+
+    # Fallback if parsing/formatting failed
+    if not canonical:
+        canonical = base
+    if not queries:
+        # Synthesize alignment-oriented queries using names and intent verbs
+        if names:
+            nm = " ".join(names[:2])
+            candidates = [
+                f"What courses does {nm} teach at IIT Ropar?",
+                f"What subjects does {nm} teach in Computer Science?",
+                f"What are {nm}'s research interests at IIT Ropar?",
+            ]
+        else:
+            candidates = [
+                f"{base} at IIT Ropar",
+                base.replace("What does", "What courses does").replace("what does", "what courses does"),
+                base.replace("teach", "teach at IIT Ropar"),
+            ]
+        seen = {canonical.lower()}
+        queries = []
+        for v in candidates:
+            s = re.sub(r"\s+", " ", v).strip()
+            if s and s.lower() not in seen and _valid_query(s, names):
+                seen.add(s.lower())
+                queries.append(s)
+            if len(queries) >= n:
+                break
+
+    print(f"[QOQA] canonical: {canonical} | queries: {queries}")
+    return {"canonical": canonical, "queries": queries}
+
 def generate_paraphrases_with_llm(query: str, n: int = 3) -> list:
     """Use the LLM to produce a few short, diverse paraphrases for higher-recall retrieval.
     Returns a list of strings. Falls back gracefully on parsing errors.
@@ -77,27 +200,107 @@ def normalize_name(name):
     """Normalize name variations for better matching."""
     return ''.join(c.lower() for c in name if c.isalnum())
 
+# --- Generic intent/entity signals and filtering ---
+INTENTS = {
+    "leadership": {"hod", "head", "head of", "chair", "chairperson", "runs", "leads", "in charge"},
+    "teaching": {"teach", "teaches", "teaching", "course", "courses", "subject", "subjects", "syllabus"},
+    "research": {"interest", "interests", "research", "areas"},
+    "contact": {"email", "phone", "contact", "room"},
+    "hostel": {"hostel", "warden", "mess", "executive", "council"},
+    "guest": {"guest house", "booking", "category a", "category b", "b-1", "b-2"},
+}
+
+DEPARTMENTS = {
+    "cse", "computer science", "computer science & engineering",
+    "civil", "ece", "eee", "mechanical", "chemical", "dbme",
+    "saide",
+}
+
+COURSE_CODE_RE = re.compile(r"\b[A-Z]{2}\d{3}\b")
+
+def _extract_names(text: str) -> list[str]:
+    toks = re.findall(r"[A-Za-z][A-Za-z\.]+", text)
+    out = []
+    skip = {"what","who","is","the","of","and","at","for","in","to","a","an","on","with","about",
+            "prof","prof.","dr","dr.","iit","ropar","iitrpr"}
+    for t in toks:
+        tl = t.lower().strip('.')
+        if tl in skip:
+            continue
+        if (t[0].isupper() and len(t) >= 3) or len(t) >= 5:
+            out.append(t.strip('.'))
+    return out[:3]
+
+def _extract_signals(query: str) -> dict:
+    ql = query.lower()
+    intents_hit = set()
+    for k, toks in INTENTS.items():
+        if any(tok in ql for tok in toks):
+            intents_hit.add(k)
+    dept_hits = {d for d in DEPARTMENTS if d in ql}
+    has_course_code = bool(COURSE_CODE_RE.search(query))
+    names = _extract_names(query)
+    return {
+        "intents": intents_hit,
+        "dept_hits": dept_hits,
+        "has_course_code": has_course_code,
+        "names": names,
+    }
+
+def _haystack_for_doc(d) -> str:
+    meta = getattr(d, 'metadata', {}) or {}
+    return " ".join([
+        (d.page_content or ''),
+        str(meta.get('question') or ''),
+        str(meta.get('answer') or ''),
+        str(meta.get('category') or ''),
+    ]).lower()
+
+def _passes_generic_filter(d, signals: dict) -> bool:
+    hay = _haystack_for_doc(d)
+    # If we have any intent, require at least one matching token from that union
+    if signals["intents"]:
+        intent_union = set().union(*(INTENTS[k] for k in signals["intents"]))
+        if not any(tok in hay for tok in intent_union):
+            return False
+    # If we have explicit entity/domain (dept, course code, names), require at least one
+    entity_hit = False
+    if signals["dept_hits"] and any(d in hay for d in DEPARTMENTS):
+        entity_hit = True
+    if signals["has_course_code"] and COURSE_CODE_RE.search(hay):
+        entity_hit = True
+    if signals["names"] and any(n.lower() in hay for n in signals["names"]):
+        entity_hit = True
+    # If no entity cues were present in query, don't block on entity match
+    want_entity = bool(signals["dept_hits"] or signals["has_course_code"] or signals["names"])
+    if want_entity and not entity_hit:
+        return False
+    return True
+
 def answer_question(vectordb, query, top_k=5, use_mmr=True):
     """
     Retrieves relevant context from ChromaDB and queries the LLM with a strict prompt.
     """
 
     try:
-        # 1️⃣ Build LLM-based multi-query variants to improve recall
-        variants = [query]
+        # 1️⃣ QOQA rewrite: canonical + alignment-oriented queries
+        qo = qoqa_rewrite(query, n=3)
+        canonical = qo.get("canonical", query.strip())
+        variants = [canonical] + qo.get("queries", [])
+        # Add a single diversity paraphrase and an anchored variant
         try:
-            llm_variants = generate_paraphrases_with_llm(query, n=3)
+            llm_variants = generate_paraphrases_with_llm(canonical, n=1)
             variants.extend(llm_variants)
         except Exception:
             pass
-        # Always include a simple anchored variant
-        variants.append(f"{query} IIT Ropar")
+        if "iit ropar" not in canonical.lower():
+            variants.append(f"{canonical} IIT Ropar")
 
         # 2️⃣ Retrieve with MMR for each variant (high fetch_k), then union
         candidate_docs = []
         for v in variants:
             try:
-                docs_v = vectordb.max_marginal_relevance_search(v, k=top_k, fetch_k=100)
+                docs_v = vectordb.max_marginal_relevance_search(v, k=top_k, fetch_k=120)
             except Exception:
                 docs_v = vectordb.similarity_search(v, k=top_k)
             candidate_docs.extend(docs_v)
@@ -116,9 +319,14 @@ def answer_question(vectordb, query, top_k=5, use_mmr=True):
                 seen.add(key)
                 deduped.append(d)
 
-        # Keep only top_k after union+dedup for final context
-        results = deduped[:top_k]
-        print(f"[RETRIEVE] deduplicated to {len(results)} docs (top_k={top_k})")
+        # 4️⃣ Generic pre-LLM filter using intent/entity signals (safe fallback)
+        signals = _extract_signals(canonical)
+        filtered = [d for d in deduped if _passes_generic_filter(d, signals)]
+        chosen = filtered if filtered else deduped
+
+        # Keep only top_k after filter
+        results = chosen[:top_k]
+        print(f"[RETRIEVE] dedup={len(deduped)} filtered={len(filtered)} -> using {len(results)} (top_k={top_k})")
 
         if not results:
             return "I’m sorry, I don’t have information on that."
@@ -137,8 +345,8 @@ def answer_question(vectordb, query, top_k=5, use_mmr=True):
         ).to_string()
 
         # 4️⃣ Debug what’s going to LLM
-        print("\n=== FINAL PROMPT SENT TO LLM ===")
-        print(prompt_text[:2000])  # print first 2000 chars only to avoid flooding console
+        '''print("\n=== FINAL PROMPT SENT TO LLM ===")
+        print(prompt_text[:2000])  # print first 2000 chars only to avoid flooding console'''
 
         # 5️⃣ Call Llama3
         response = llm.invoke(prompt_text)
@@ -149,3 +357,57 @@ def answer_question(vectordb, query, top_k=5, use_mmr=True):
     except Exception as e:
         print(f"Error in answer_question: {e}")
         return "I encountered an error while processing your request."
+
+
+def debug_retrieve(vectordb, query, top_k=5):
+    """Diagnostics for retrieval: returns canonical, queries, candidates, filter decisions, and final prompt (truncated)."""
+    info = {"query": query, "canonical": None, "queries": [], "candidates": [], "filtered": [], "selected": [], "final_prompt": None}
+    try:
+        qo = qoqa_rewrite(query, n=3)
+        canonical = qo.get("canonical", query.strip())
+        variants = [canonical] + qo.get("queries", [])
+        if "iit ropar" not in canonical.lower():
+            variants.append(f"{canonical} IIT Ropar")
+        info["canonical"], info["queries"] = canonical, variants
+
+        # retrieve
+        candidate_docs = []
+        for v in variants:
+            try:
+                docs_v = vectordb.max_marginal_relevance_search(v, k=top_k, fetch_k=120)
+            except Exception:
+                docs_v = vectordb.similarity_search(v, k=top_k)
+            candidate_docs.extend(docs_v)
+
+        # dedup
+        seen = set(); deduped = []
+        for d in candidate_docs:
+            meta = getattr(d, 'metadata', {}) or {}
+            email_key = str(meta.get('email') or '').strip().lower()
+            name_key = str(meta.get('question') or meta.get('name') or '').strip().lower()
+            key = email_key or name_key or (d.page_content[:100].lower() if d.page_content else '')
+            if key and key not in seen:
+                seen.add(key); deduped.append(d)
+
+        # filter decisions
+        signals = _extract_signals(canonical)
+        for d in deduped:
+            passed = _passes_generic_filter(d, signals)
+            info["candidates"].append({
+                "passed": passed,
+                "snippet": (d.page_content or '')[:300],
+                "metadata": getattr(d, 'metadata', {}) or {}
+            })
+        filtered = [d for d in deduped if _passes_generic_filter(d, signals)]
+        chosen = filtered if filtered else deduped
+        selected = chosen[:top_k]
+        info["filtered"] = [bool(_passes_generic_filter(d, signals)) for d in deduped]
+        info["selected"] = [{"snippet": (d.page_content or '')[:300], "metadata": getattr(d, 'metadata', {}) or {}} for d in selected]
+
+        context = "\n\n".join(doc.page_content for doc in selected)
+        prompt_text = prompt_template.format_prompt(context=context, question=query).to_string()
+        info["final_prompt"] = prompt_text[:2000]
+        return info
+    except Exception as e:
+        info["error"] = str(e)
+        return info
