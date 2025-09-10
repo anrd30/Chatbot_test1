@@ -73,25 +73,34 @@ export default function App() {
       }, 60_000);
       timersRef.current.push(t1, t2, t3);
 
-      // Use Vite dev proxy to avoid CORS in development
-      const response = await fetch('/api/chat', {
+      // Use the environment variable for the API URL
+      const apiUrl = import.meta.env.VITE_API_URL || '/api/chat';
+      
+      console.log('Sending request to:', apiUrl);
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ question: message }),
         signal: controller.signal,
       });
 
+      console.log('Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error(`Error: ${response.status}`);
+        const errorText = await response.text();
+        console.error('Server error:', errorText);
+        throw new Error(`Error ${response.status}: ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('Response data:', data);
 
       const assistantMessage: Message = {
         role: 'assistant',
-        content: data.reply,
+        content: data.answer || data.error || 'No response from server',
         timestamp: new Date(),
       };
 

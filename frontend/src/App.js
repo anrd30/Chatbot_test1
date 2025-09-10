@@ -11,10 +11,11 @@ function App() {
     setMessages(newMessages);
 
     try {
-      const response = await axios.post("http://localhost:5000/chat", {
-        message: userMessage
+      // Use relative path for Vercel deployment
+      const response = await axios.post("/api/chat", {
+        question: userMessage
       });
-      setMessages([...newMessages, { sender: "bot", text: response.data.reply }]);
+      setMessages([...newMessages, { sender: "bot", text: response.data.answer }]);
     } catch (error) {
       setMessages([...newMessages, { sender: "bot", text: "Error connecting to backend" }]);
       console.error(error);

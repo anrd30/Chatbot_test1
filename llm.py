@@ -2,6 +2,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama.llms import OllamaLLM
 import json
 import re
+from typing import Optional, List
 
 # Prompt template for CSV Q&A
 template = """
@@ -196,6 +197,23 @@ def generate_paraphrases_with_llm(query: str, n: int = 3) -> list:
     except Exception:
         return []
 
+def hyde_generate(query: str) -> str:
+    """HyDE: Generate a hypothetical answer/passage for the query to use for retrieval.
+    Keep it short and factual in tone. Fail open to empty string.
+    """
+    try:
+        prompt = (
+            "You are writing a concise passage that would answer the user's question about IIT Ropar.\n"
+            "Do NOT include disclaimers or sources. 3-5 sentences, factual tone.\n\n"
+            f"Question: {query}\n\n"
+            "Passage:"
+        )
+        text = llm.invoke(prompt)
+        # sanitize newlines and trim
+        return re.sub(r"\s+", " ", text).strip()
+    except Exception:
+        return ""
+
 def normalize_name(name):
     """Normalize name variations for better matching."""
     return ''.join(c.lower() for c in name if c.isalnum())
@@ -277,7 +295,7 @@ def _passes_generic_filter(d, signals: dict) -> bool:
         return False
     return True
 
-def answer_question(vectordb, query, top_k=5, use_mmr=True):
+def answer_question(vectordb, query, top_k=5, use_mmr=True, bm25_retriever: Optional[object] = None, use_hyde: bool = True):
     """
     Retrieves relevant context from ChromaDB and queries the LLM with a strict prompt.
     """
@@ -296,16 +314,43 @@ def answer_question(vectordb, query, top_k=5, use_mmr=True):
         if "iit ropar" not in canonical.lower():
             variants.append(f"{canonical} IIT Ropar")
 
-        # 2️⃣ Retrieve with MMR for each variant (high fetch_k), then union
+        # 2️⃣ (Optional) HyDE: generate a hypothetical answer to boost retrieval
+        hyde_passage = hyde_generate(canonical) if use_hyde else ""
+
+        # 3️⃣ Retrieve (Dense: E5) with MMR for each variant (high fetch_k), then union
         candidate_docs = []
         for v in variants:
+            q_dense = v
             try:
-                docs_v = vectordb.max_marginal_relevance_search(v, k=top_k, fetch_k=120)
+                docs_v = vectordb.max_marginal_relevance_search(q_dense, k=top_k, fetch_k=120)
             except Exception:
-                docs_v = vectordb.similarity_search(v, k=top_k)
+                docs_v = vectordb.similarity_search(q_dense, k=top_k)
             candidate_docs.extend(docs_v)
 
-        print(f"\n[RETRIEVE] collected {len(candidate_docs)} docs across {len(variants)} variants")
+        # Dense retrieval using HyDE passage as query (if available)
+        if hyde_passage:
+            try:
+                docs_h = vectordb.max_marginal_relevance_search(hyde_passage, k=top_k, fetch_k=120)
+            except Exception:
+                docs_h = vectordb.similarity_search(hyde_passage, k=top_k)
+            candidate_docs.extend(docs_h)
+
+        # 4️⃣ (Optional) Sparse BM25 retrieval for hybrid
+        if bm25_retriever is not None:
+            try:
+                bm25_docs_q = bm25_retriever.get_relevant_documents(canonical) or []
+            except Exception:
+                bm25_docs_q = []
+            candidate_docs.extend(bm25_docs_q[: top_k])
+
+            if hyde_passage:
+                try:
+                    bm25_docs_h = bm25_retriever.get_relevant_documents(hyde_passage) or []
+                except Exception:
+                    bm25_docs_h = []
+                candidate_docs.extend(bm25_docs_h[: top_k])
+
+        print(f"\n[RETRIEVE] collected {len(candidate_docs)} docs (dense + hyde + {'bm25' if bm25_retriever else 'no-bm25'}) across {len(variants)} variants")
 
         # 3️⃣ Deduplicate by a stable key: email or question (name) or first 100 chars
         seen = set()

@@ -1,0 +1,15 @@
+{"question": "Who is the HOD of DBME?", "ground_truth": ["Dr. Atharva Poundarik, Assistant Professor, Room 219 SS Bhatnagar Block, atharva@iitrpr.ac.in, 01881-242511"]}
+{"question": "Who is the HOD of Chemical Engineering?", "ground_truth": ["Dr. Navin Gopinathan, navin.gopinathan@iitrpr.ac.in"]}
+{"question": "Who is the HOD of Civil Engineering?", "ground_truth": ["Dr. Reet Kamal Tiwari, Associate Professor, reetkamal@iitrpr.ac.in"]}
+{"question": "How to book a room in the Guest House?", "ground_truth": ["Email guesthouse@iitrpr.ac.in or call +91 01881-236951; submit a completed application form."]}
+{"question": "What are Guest House check-in and check-out times?", "ground_truth": ["Check-in: 1:00 PM, Check-out: 11:00 AM."]}
+{"question": "What recreational facilities are available on campus?", "ground_truth": ["Gymnasium, cricket, football, tennis, basketball grounds."]}
+{"question": "What transportation facility is available?", "ground_truth": ["Institute bus facility."]}
+{"question": "Who is the Head of School for AI & ML at IIT Ropar?", "ground_truth": ["Dr. Santosh Kumar Vipparthi, Associate Professor and Head of the School"]}
+{"question": "Name the engineering departments at IIT Ropar.", "ground_truth": ["Artificial Intelligence and Data Engineering, BioMedical Engineering, Chemical Engineering, Civil Engineering, Computer Science & Engineering, Electrical Engineering, Mechanical Engineering, Metallurgical and Materials Engineering"]}
+{"question": "Name the science departments at IIT Ropar.", "ground_truth": ["Chemistry, Physics, Mathematics"]}
+{"question": "Name the humanities departments at IIT Ropar.", "ground_truth": ["Humanities and Social Sciences"]}
+{"question": "Who manages the day-to-day affairs of hostels?", "ground_truth": ["A committee of student representatives and wardens for each hostel."]}
+{"question": "What facilities are provided in hostel common rooms?", "ground_truth": ["Indoor recreation and games."]}
+{"question": "Are pets allowed in the Guest House?", "ground_truth": ["No pets are allowed."]}
+{"question": "What is the purpose of the Guest House?", "ground_truth": ["Accommodation for visiting IIT staff, guests, alumni, parents, conference attendees, and official guests."]}

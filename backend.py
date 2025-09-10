@@ -3,6 +3,7 @@ from flask_cors import CORS, cross_origin
 from processing1 import load_csv, split_documents
 from db import build_or_load_db
 from llm import answer_question
+from langchain_community.retrievers import BM25Retriever
 import os
 import traceback
 
@@ -42,9 +43,13 @@ for i, doc in enumerate(chunked_docs[:3]):
     print(f"Metadata: {doc.metadata}")
 
 # Build or load the vector database
-COLLECTION_NAME = "iitrpr_faq"
+COLLECTION_NAME = "iitrpr_faq_ev52"
 print("\nBuilding/loading vector database...")
 vectordb = build_or_load_db(chunked_docs, persist_dir=PERSIST_DIR, collection_name=COLLECTION_NAME)
+
+# Create sparse BM25 retriever for hybrid retrieval
+print("Creating BM25 retriever for hybrid retrieval...")
+bm25_retriever = BM25Retriever.from_documents(chunked_docs)
 
 print("Backend ready. Vector DB loaded.")
 
@@ -83,7 +88,7 @@ def chat():
             return jsonify({"reply": "No message received"}), 400
         
         print(f"\n[DEBUG] Processing message: {user_message}")
-        reply = answer_question(vectordb, user_message)
+        reply = answer_question(vectordb, user_message, bm25_retriever=bm25_retriever)
         print(f"[DEBUG] Generated reply: {reply[:200]}")
         
         response = jsonify({"reply": reply})

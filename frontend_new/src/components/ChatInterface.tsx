@@ -145,7 +145,18 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
           >
             <ReactMarkdown
               components={{
-                code({ node, inline, className, children, ...props }) {
+                code({
+                  node,
+                  inline,
+                  className,
+                  children,
+                  ...props
+                }: {
+                  node?: any;
+                  inline?: boolean;
+                  className?: string;
+                  children?: React.ReactNode;
+                }) {
                   const match = /language-(\w+)/.exec(className || '');
                   return !inline && match ? (
                     <pre

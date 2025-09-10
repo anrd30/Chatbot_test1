@@ -6,14 +6,20 @@ export interface Message {
 
 export const sendMessage = async (message: string): Promise<string> => {
   try {
-    console.log('Sending message to:', `/api/chat`);
-    const response = await fetch(`/api/chat`, {
+    console.log('Sending message to API');
+
+    // Use relative URL for Vercel deployment
+    const apiUrl = import.meta.env.VITE_API_URL || '/api/chat';
+
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({
+        question: message
+      }),
     });
 
     console.log('Response status:', response.status);
@@ -26,7 +32,7 @@ export const sendMessage = async (message: string): Promise<string> => {
 
     const data = await response.json();
     console.log('Response data:', data);
-    return data.reply || 'Sorry, I could not process your request.';
+    return data.answer || 'Sorry, I could not process your request.';
   } catch (error) {
     console.error('Error sending message:', error);
     return 'Sorry, there was an error processing your request. Please try again.';
