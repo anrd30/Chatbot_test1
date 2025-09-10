@@ -11,7 +11,7 @@ def build_or_load_db(documents=None, persist_dir="chromaDb_csv1", collection_nam
         raise ValueError("You must provide a collection_name")
 
     print(f"[DEBUG] build_or_load_db: docs={'None' if documents is None else len(documents)}, persist_dir={persist_dir}, collection_name={collection_name}")
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/multi-qa-MiniLM-L6-cos-v1")
 
     # Load if persisted DB exists and no documents provided to rebuild
     if os.path.exists(persist_dir) and len(os.listdir(persist_dir)) > 0 and documents is None:

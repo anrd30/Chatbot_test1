@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Box, CssBaseline, Container, Stack, Button } from '@mui/material';
+import { Box, CssBaseline, Container, Stack, Button, useTheme } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import { theme } from './theme';
 import { ChatInterface } from './components/ChatInterface';
 import { Header } from './components/Header';
 import Testing from './components/Testing';
 import { Message } from './services/api';
+import ChatIcon from '@mui/icons-material/Chat';
+import BuildIcon from '@mui/icons-material/Build';
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -16,18 +18,30 @@ export default function App() {
   const timersRef = useRef<number[]>([]);
   const [view, setView] = useState<'chat' | 'testing'>('chat');
 
-  // Initialize chatId on first load
+  // Load messages from localStorage on mount
   useEffect(() => {
-    setChatId(`chat-${Date.now()}`);
+    const saved = localStorage.getItem('chatHistory');
+    if (saved) {
+      try {
+        const parsedMessages = JSON.parse(saved);
+        setMessages(parsedMessages);
+      } catch (error) {
+        console.error('Error parsing chat history:', error);
+      }
+    }
   }, []);
 
-  // Scroll to bottom whenever messages change
+  // Save messages to localStorage whenever they change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length > 0) {
+      localStorage.setItem('chatHistory', JSON.stringify(messages));
+    }
   }, [messages]);
 
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
+
+    const startTime = Date.now();
 
     const userMessage: Message = {
       role: 'user',
@@ -98,9 +112,12 @@ export default function App() {
       const data = await response.json();
       console.log('Response data:', data);
 
+      const endTime = Date.now();
+      const time = ((endTime - startTime) / 1000).toFixed(1);
+
       const assistantMessage: Message = {
         role: 'assistant',
-        content: data.answer || data.error || 'No response from server',
+        content: `${data.answer || data.error || 'No response from server'}\n\nResponded in ${time}s`,
         timestamp: new Date(),
       };
 
@@ -113,9 +130,11 @@ export default function App() {
       console.error('Error sending message:', error);
       // If aborted by our timeout, we already appended a timeout message in t3
       if (error?.name !== 'AbortError') {
+        const errorEndTime = Date.now();
+        const errorTime = ((errorEndTime - startTime) / 1000).toFixed(1);
         const errorMessage: Message = {
           role: 'assistant',
-          content: 'Sorry, there was an error processing your request. Please try again.',
+          content: `Sorry, there was an error processing your request. Responded in ${errorTime}s`,
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMessage]);
@@ -128,6 +147,7 @@ export default function App() {
   const handleNewChat = () => {
     setChatId(`chat-${Date.now()}`);
     setMessages([]);
+    localStorage.removeItem('chatHistory');
     // Cleanup timers and any pending request
     if (controllerRef.current) {
       controllerRef.current.abort();
@@ -153,8 +173,8 @@ export default function App() {
           }}
         >
           <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-            <Button variant={view === 'chat' ? 'contained' : 'outlined'} onClick={() => setView('chat')}>Chat</Button>
-            <Button variant={view === 'testing' ? 'contained' : 'outlined'} onClick={() => setView('testing')}>Testing</Button>
+            <Button variant={view === 'chat' ? 'contained' : 'outlined'} startIcon={<ChatIcon />} onClick={() => setView('chat')}>Chat</Button>
+            <Button variant={view === 'testing' ? 'contained' : 'outlined'} startIcon={<BuildIcon />} onClick={() => setView('testing')}>Testing</Button>
           </Stack>
 
           {view === 'chat' ? (

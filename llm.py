@@ -57,7 +57,18 @@ def qoqa_rewrite(query: str, n: int = 3) -> dict:
     "- Each query must stay under 16 words.\n"
     "- Do not generate answers, explanations, or filler text.\n"
     "- If user question is ambiguous, generate variants that cover multiple likely intents.\n\n"
-    f"User question: {base}\n"
+    # Adaptive rules based on keywords
+    + ("- For hostel-related queries, generate variants like 'What amenities does X hostel offer?' or 'What facilities are available in X hostel?'\n" if "hostel" in base.lower() else "")
+    + ("- For doctor/medical queries, generate variants like 'What is Dr. X's specialization?' or 'What services does Dr. X provide?'\n" if any(word in base.lower() for word in ["doctor", "dr.", "medical", "hospital"]) else "")
+    + ("- For admission-related queries, generate variants like 'What are the admission requirements for X?' or 'How to apply for X program?'\n" if "admission" in base.lower() else "")
+    + ("- For facility-related queries, generate variants like 'What is available at X facility?' or 'How to access X?'\n" if any(word in base.lower() for word in ["facility", "sports", "gym", "library", "mess"]) else "")
+    + ("- For staff/admin queries, generate variants like 'What is the role of X?' or 'Who handles X?'\n" if any(word in base.lower() for word in ["staff", "admin", "warden", "council"]) else "")
+    + ("- For course-related queries, generate variants like 'What topics are covered in X course?' or 'What is taught in X subject?'\n" if any(word in base.lower() for word in ["course", "subject", "curriculum", "syllabus"]) else "")
+    + ("- For research-related queries, generate variants like 'What are the research interests of X?' or 'What projects does X work on?'\n" if "research" in base.lower() else "")
+    + ("- For event-related queries, generate variants like 'What is happening at X event?' or 'When is X scheduled?'\n" if any(word in base.lower() for word in ["event", "festival", "seminar", "workshop"]) else "")
+    + ("- For transport-related queries, generate variants like 'How to reach X via transport?' or 'What transport options are for X?'\n" if any(word in base.lower() for word in ["transport", "bus", "train", "airport"]) else "")
+    + ("- For department-related queries, generate variants like 'What does X department do?' or 'Who is in X department?'\n" if any(word in base.lower() for word in ["department", "cse", "ece", "mechanical"]) else "")
+    + f"\nUser question: {base}\n"
 )
 
         
