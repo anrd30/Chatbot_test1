@@ -16,34 +16,11 @@
   "routes": [
     {
       "src": "/api/chat",
-      "dest": "/api/chat",
-      "methods": ["POST", "OPTIONS"],
-      "headers": {
-        "Access-Control-Allow-Origin": ["*"],
-        "Access-Control-Allow-Methods": ["POST", "OPTIONS"],
-        "Access-Control-Allow-Headers": ["Content-Type"],
-        "Access-Control-Allow-Credentials": ["true"]
-      }
+      "dest": "/api/chat"
     },
     {
-      "src": "^/static/(.*)",
-      "dest": "/frontend_new/static/$1"
-    },
-    {
-      "src": "^/favicon.ico",
-      "dest": "/frontend_new/favicon.ico"
-    },
-    {
-      "src": "^/assets/(.*)",
-      "dest": "/frontend_new/assets/$1"
-    },
-    {
-      "src": "^/manifest.json",
-      "dest": "/frontend_new/manifest.json"
-    },
-    {
-      "src": "^/(.*)",
-      "dest": "/frontend_new/index.html"
+      "src": "/(.*)",
+      "dest": "/frontend_new/$1"
     }
   ]
 }

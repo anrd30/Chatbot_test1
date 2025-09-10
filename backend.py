@@ -43,7 +43,7 @@ for i, doc in enumerate(chunked_docs[:3]):
     print(f"Metadata: {doc.metadata}")
 
 # Build or load the vector database
-COLLECTION_NAME = "iitrpr_faq_ev52"
+COLLECTION_NAME = "iitrpr_faq"
 print("\nBuilding/loading vector database...")
 vectordb = build_or_load_db(chunked_docs, persist_dir=PERSIST_DIR, collection_name=COLLECTION_NAME)
 
@@ -66,9 +66,6 @@ print(f"Answer: {answer}\n")'''
 def chat():
     if request.method == "OPTIONS":
         response = make_response()
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add("Access-Control-Allow-Headers", "*")
-        response.headers.add("Access-Control-Allow-Methods", "*")
         return response
         
     try:
@@ -83,23 +80,22 @@ def chat():
         data = request.get_json()
         print(f"\n=== Request Data ===\n{data}")
         
-        user_message = data.get("message")
+        user_message = data.get("question")
         if not user_message:
-            return jsonify({"reply": "No message received"}), 400
+            return jsonify({"answer": "No message received"}), 400
         
         print(f"\n[DEBUG] Processing message: {user_message}")
         reply = answer_question(vectordb, user_message, bm25_retriever=bm25_retriever)
         print(f"[DEBUG] Generated reply: {reply[:200]}")
         
-        response = jsonify({"reply": reply})
-        response.headers.add("Access-Control-Allow-Origin", "*")
+        response = jsonify({"answer": reply})
         return response
     
     except Exception as e:
         # Log the error
         print(f"[ERROR] Exception in /chat endpoint: {e}")
         traceback.print_exc()
-        return jsonify({"reply": "I encountered an error while processing your request."}), 500
+        return jsonify({"answer": "I encountered an error while processing your request."}), 500
 if __name__ == "__main__":
     # Run with single process (no reloader) so logs are consistent
     app.run(port=5000, debug=True, use_reloader=False)
