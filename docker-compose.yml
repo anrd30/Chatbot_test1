@@ -4,21 +4,22 @@ services:
   backend:
     build: .
     ports:
-      - "3001:3001"
+      - "5001:5000"
     volumes:
       - .:/app
     environment:
       - PYTHONUNBUFFERED=1
-    command: python -m http.server 3001
+    command: python backend.py
     
   frontend:
     build:
       context: ./frontend_new
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - NODE_ENV=development
+      - VITE_API_URL=http://backend:5000/chat
     volumes:
       - ./frontend_new:/app
       - /app/node_modules

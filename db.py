@@ -1,6 +1,6 @@
 import os
 from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 def build_or_load_db(documents=None, persist_dir="chromaDb_csv1", collection_name=None):
     """
