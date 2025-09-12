@@ -6,6 +6,7 @@ from .llm import answer_question
 from langchain_community.retrievers import BM25Retriever
 import os
 import traceback
+import speech_recognition as sr
 
 app = Flask(__name__)
 CORS(app, resources={
@@ -19,11 +20,11 @@ CORS(app, resources={
 })
 
 # API Key for authentication
-API_KEY = os.getenv('API_KEY', 'default_key')
+API_KEY = os.getenv('API_KEY', 'your_api_key_here')
 
 # --- Load CSV and build vector DB once on startup ---
-CSV_PATH = "../data/DATA_FAQ_EXPANDED.csv"
-PERSIST_DIR = "../chromaDb_expanded"
+CSV_PATH = r"C:\Users\aniru\Chatbot_test1-1\data\DATA_FAQ_EXPANDED.csv"
+PERSIST_DIR = r"C:\Users\aniru\Chatbot_test1-1\chromaDb_expanded"
 
 if not os.path.exists(PERSIST_DIR):
     os.makedirs(PERSIST_DIR)
@@ -56,26 +57,46 @@ bm25_retriever = BM25Retriever.from_documents(chunked_docs)
 
 print("Backend ready. Vector DB loaded.")
 
-'''test_query = "Who is Dr. Sudarshan?"
-print("\n--- Backend Test ---")
-print(f"Query: {test_query}")
-answer = answer_question(vectordb, test_query)
-print(f"Answer: {answer}\n")'''
+def speech_to_text(audio_file):
+    """Convert audio file to text using Google Speech Recognition."""
+    recognizer = sr.Recognizer()
+    try:
+        with sr.AudioFile(audio_file) as source:
+            audio = recognizer.record(source)
+        text = recognizer.recognize_google(audio)
+        return text
+    except sr.UnknownValueError:
+        return "Could not understand audio"
+    except sr.RequestError as e:
+        return f"STT service error: {e}"
 
-API_KEY = "your_api_key_here"
+# --- API Endpoints ---
 
-# --- API Endpoint ---
+@app.route("/stt", methods=["POST", "OPTIONS"])
+@cross_origin()
+def stt():
+    if request.method == "OPTIONS":
+        response = make_response()
+        return response
+        
+    try:
+        audio_file = request.files.get("audio")
+        if not audio_file:
+            return jsonify({"error": "No audio file provided"}), 400
+        
+        text = speech_to_text(audio_file)
+        return jsonify({"text": text})
+    
+    except Exception as e:
+        print(f"[ERROR] STT failed: {e}")
+        return jsonify({"error": "STT processing failed"}), 500
+
 @app.route("/chat", methods=["POST", "OPTIONS"])
 @cross_origin()
 def chat():
     if request.method == "OPTIONS":
         response = make_response()
         return response
-        
-    # API Key authentication
-    api_key = request.headers.get('Authorization')
-    if not api_key or api_key != f'Bearer {API_KEY}':
-        return jsonify({"error": "Unauthorized"}), 401
         
     try:
         print("\n=== Request Headers ===")
@@ -93,9 +114,18 @@ def chat():
         if not user_message:
             return jsonify({"answer": "No message received"}), 400
         
+        # Greeting detection
+        greeting_words = ["hello", "hi", "hey", "good morning", "good afternoon", "good evening", "how are you", "what's up", "greetings", "good day"]
+        if any(word in user_message.lower() for word in greeting_words):
+            return jsonify({"answer": "Hello! I'm the IIT Ropar chatbot. How can I help you today?"})
+        
         print(f"\n[DEBUG] Processing message: {user_message}")
-        reply = answer_question(vectordb, user_message, bm25_retriever=bm25_retriever)
-        print(f"[DEBUG] Generated reply: {reply[:200]}")
+        try:
+            reply = answer_question(vectordb, user_message, bm25_retriever=bm25_retriever)
+            print(f"[DEBUG] Generated reply: {reply[:200]}")
+        except Exception as e:
+            print(f"[ERROR] Failed to generate answer: {e}")
+            reply = "I'm sorry, I encountered an error while processing your request. Please try again."
         
         response = jsonify({"answer": reply})
         return response

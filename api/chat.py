@@ -7,11 +7,11 @@ from urllib.parse import parse_qs, urlparse
 # Add parent directory to path to import your modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from db import build_or_load_db
-from llm import answer_question
+from chatbot_backend.db import build_or_load_db
+from chatbot_backend.llm import answer_question
 
 # Initialize the vector database
-PERSIST_DIR = "chromaDb_csv1"
+PERSIST_DIR = os.path.join(os.path.dirname(__file__), "../../../chromaDb_expanded")
 COLLECTION_NAME = "iitrpr_faq"
 
 # This will be initialized on first request

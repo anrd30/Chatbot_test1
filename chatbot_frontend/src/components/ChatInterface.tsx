@@ -1,5 +1,6 @@
-import { Box, TextField, IconButton, Paper, Typography, Avatar, CircularProgress } from '@mui/material';
+import { Box, TextField, IconButton, Paper, Typography, Avatar, CircularProgress, Stack } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
+import MicIcon from '@mui/icons-material/Mic';
 import React, { useState, useEffect, useRef } from 'react';
 import { Message } from '../services/api';
 import { format } from 'date-fns';
@@ -19,7 +20,41 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   messagesEndRef,
 }) => {
   const [message, setMessage] = useState('');
+  const [isListening, setIsListening] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const startListening = () => {
+    console.log('Starting voice recognition...');
+    setIsListening(true);
+    // @ts-ignore
+    const recognition = new webkitSpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+    recognition.onresult = (event) => {
+      console.log('Speech result event:', event);
+      // @ts-ignore
+      const transcript = event.results[0][0].transcript;
+      console.log('Transcript:', transcript);
+      setMessage(transcript);
+      setIsListening(false);
+    };
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      setIsListening(false);
+    };
+    recognition.onend = () => {
+      console.log('Speech recognition ended');
+      setIsListening(false);
+    };
+    try {
+      recognition.start();
+      console.log('Recognition started successfully');
+    } catch (error) {
+      console.error('Failed to start recognition:', error);
+      setIsListening(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +115,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         elevation={3}
         sx={{ p: 1, display: 'flex', alignItems: 'center', width: '100%' }}
       >
+        <IconButton onClick={startListening} color={isListening ? "secondary" : "primary"} disabled={isLoading} sx={{ mr: 1 }}>
+          {isListening ? <CircularProgress size={24} /> : <MicIcon />}
+        </IconButton>
         <TextField
           inputRef={inputRef}
           fullWidth

@@ -3,19 +3,13 @@ from langchain_ollama.llms import OllamaLLM
 import json
 import re
 from typing import Optional, List
+from sentence_transformers import CrossEncoder
 
 # Prompt template for CSV Q&A
 template = """
-You are a helpful assistant for IIT Ropar-specific information. Answer the user’s question only using the information in the context provided.
-You are allowed to reframe the questions so as to get an asnwer but the final answer should be in the context provided.
-Rules:
-All context provided directly refers to IIT Ropar. So when I say "Is there a hospital?", it means "Is there a hospital in IIT Ropar."
-Answer directly and concisely, in 1–4 lines.Do not create puzzles, hypothetical scenarios, reasoning chains, or explanations.
-If the answer is not in the context, respond exactly: "I’m sorry, I don’t have information on that."
-If a question is not related to IIT Ropar, respond exactly: "I’m sorry, I can only answer questions related to IIT Ropar."
-Never hallucinate; answer only the asked question.
-If the question is about the mess menu, list exact meals: breakfast, lunch, and dinner.
+You are a helpful assistant for IIT Ropar-specific information. First, check if the question is related to IIT Ropar. If not, respond exactly: "I’m sorry, I can only answer questions related to IIT Ropar." Do not provide information on topics outside IIT Ropar.
 
+If the question is related to IIT Ropar, always answer based on the provided context. Do not say 'I don't have information' or 'sorry' if the context contains relevant details. Use the context to provide a direct answer.
 
 Context:
 {context}
@@ -27,14 +21,14 @@ Answer:
 """
 
 prompt_template = ChatPromptTemplate.from_template(template)
-# Using llama3 for better understanding and response generation
-llm = OllamaLLM(model="phi:latest", temperature=0.1, max_tokens=2000)
+# Using mistral for better understanding and response generation
+llm = OllamaLLM(model="mistral:7b-instruct-q4_K_M", temperature=0.3, max_tokens=2000)
 
 def qoqa_rewrite(query: str, n: int = 3) -> dict:
     """QOQA-style query optimization: produce one canonical rewrite and n alignment-oriented queries.
     Returns {"canonical": str, "queries": [str,...]} with robust fallbacks.
     """
-    rewriter = OllamaLLM(model="phi:latest", temperature=0.0, max_tokens=400)
+    rewriter = OllamaLLM(model="mistral:7b-instruct-q4_K_M", temperature=0.0, max_tokens=400)
     base = query.strip()
     canonical, queries = None, []
 
@@ -237,6 +231,10 @@ INTENTS = {
     "contact": {"email", "phone", "contact", "room"},
     "hostel": {"hostel", "warden", "mess", "executive", "council"},
     "guest": {"guest house", "booking", "category a", "category b", "b-1", "b-2"},
+    "courses": {"courses", "syllabus", "syllabi", "syllabus of", "syllabus for","subjects"},
+    "mess": {"mess", "mess menu", "mess menu of", "mess menu for"},
+    
+
 }
 
 DEPARTMENTS = {
@@ -306,27 +304,17 @@ def _passes_generic_filter(d, signals: dict) -> bool:
         return False
     return True
 
-def answer_question(vectordb, query, top_k=5, use_mmr=True, bm25_retriever: Optional[object] = None, use_hyde: bool = True):
+def answer_question(vectordb, query, top_k=20, use_mmr=True, bm25_retriever: Optional[object] = None, use_hyde: bool = True):
     """
     Retrieves relevant context from ChromaDB and queries the LLM with a strict prompt.
     """
 
     try:
-        # 1️⃣ QOQA rewrite: canonical + alignment-oriented queries
-        qo = qoqa_rewrite(query, n=3)
-        canonical = qo.get("canonical", query.strip())
-        variants = [canonical] + qo.get("queries", [])
-        # Add a single diversity paraphrase and an anchored variant
-        try:
-            llm_variants = generate_paraphrases_with_llm(canonical, n=1)
-            variants.extend(llm_variants)
-        except Exception:
-            pass
+        # 1️⃣ Simplified query processing (removed QOQA for speed)
+        canonical = query.strip()
+        variants = [canonical]
         if "iit ropar" not in canonical.lower():
             variants.append(f"{canonical} IIT Ropar")
-
-        # 2️⃣ (Optional) HyDE: generate a hypothetical answer to boost retrieval
-        hyde_passage = hyde_generate(canonical) if use_hyde else ""
 
         # 3️⃣ Retrieve (Dense: E5) with MMR for each variant (high fetch_k), then union
         candidate_docs = []
@@ -338,13 +326,13 @@ def answer_question(vectordb, query, top_k=5, use_mmr=True, bm25_retriever: Opti
                 docs_v = vectordb.similarity_search(q_dense, k=top_k)
             candidate_docs.extend(docs_v)
 
-        # Dense retrieval using HyDE passage as query (if available)
-        if hyde_passage:
-            try:
-                docs_h = vectordb.max_marginal_relevance_search(hyde_passage, k=top_k, fetch_k=120)
-            except Exception:
-                docs_h = vectordb.similarity_search(hyde_passage, k=top_k)
-            candidate_docs.extend(docs_h)
+        # Dense retrieval using HyDE passage as query (commented out)
+        # if hyde_passage:
+        #     try:
+        #         docs_h = vectordb.max_marginal_relevance_search(hyde_passage, k=top_k, fetch_k=120)
+        #     except Exception:
+        #         docs_h = vectordb.similarity_search(hyde_passage, k=top_k)
+        #     candidate_docs.extend(docs_h)
 
         # 4️⃣ (Optional) Sparse BM25 retrieval for hybrid
         if bm25_retriever is not None:
@@ -353,15 +341,23 @@ def answer_question(vectordb, query, top_k=5, use_mmr=True, bm25_retriever: Opti
             except Exception:
                 bm25_docs_q = []
             candidate_docs.extend(bm25_docs_q[: top_k])
+            # if hyde_passage:
+            #     try:
+            #         bm25_docs_h = bm25_retriever.get_relevant_documents(hyde_passage) or []
+            #     except Exception:
+            #         bm25_docs_h = []
+            #     candidate_docs.extend(bm25_docs_h[: top_k])
 
-            if hyde_passage:
-                try:
-                    bm25_docs_h = bm25_retriever.get_relevant_documents(hyde_passage) or []
-                except Exception:
-                    bm25_docs_h = []
-                candidate_docs.extend(bm25_docs_h[: top_k])
+        print(f"\n[RETRIEVE] collected {len(candidate_docs)} docs (dense only) across {len(variants)} variants")
 
-        print(f"\n[RETRIEVE] collected {len(candidate_docs)} docs (dense + hyde + {'bm25' if bm25_retriever else 'no-bm25'}) across {len(variants)} variants")
+        # Rerank with cross-encoder for better accuracy
+        cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+        query_doc_pairs = [(canonical, doc.page_content) for doc in candidate_docs]
+        scores = cross_encoder.predict(query_doc_pairs)
+        # Sort with stable key to avoid Document comparison errors
+        sorted_pairs = sorted(zip(scores, candidate_docs), key=lambda x: (-x[0], id(x[1])))
+        ranked_docs = [doc for _, doc in sorted_pairs]
+        candidate_docs = ranked_docs[:top_k]
 
         # 3️⃣ Deduplicate by a stable key: email or question (name) or first 100 chars
         seen = set()
